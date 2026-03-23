@@ -6,64 +6,40 @@ import PyPDF2
 
 app = FastAPI()
 
-# ✅ Groq client
 client = OpenAI(
     api_key=os.getenv("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1"
 )
 
-
-# 🔥 FAST PDF extraction
 def extract_text_from_pdf(file):
     try:
         pdf = PyPDF2.PdfReader(file.file)
         text = ""
-
-        for page in pdf.pages[:3]:   # limit pages
+        for page in pdf.pages[:3]:
             text += page.extract_text() or ""
-
-        return text[:1000]  # limit size
-
+        return text[:1000]
     except:
         return ""
-
 
 @app.get("/")
 def root():
     return {"message": "API running"}
 
-
 @app.post("/analyze")
-async def analyze(
-    resume: UploadFile = File(...),
-    job_description: str = Form(...)
-):
+async def analyze(resume: UploadFile = File(...), job_description: str = Form(...)):
     try:
         resume_text = extract_text_from_pdf(resume)
         job_description = job_description[:1000]
 
-        # 🔥 FINAL PROMPT (HIGH-IMPACT)
         prompt = f"""
 You are a senior resume expert.
 
-Analyze resume vs job description.
-
 Return STRICT JSON:
-
 {{
  "score": number,
  "missing_skills": [],
  "bullets": []
 }}
-
-Rules:
-- Score based on skill match
-- Missing skills = relevant keywords not in resume
-- Bullets must include impact (%, improvement, scale)
-- Use strong verbs (Built, Improved, Designed)
-- Max 20 words each
-- No generic phrases
-- Return ONLY JSON
 
 Resume:
 {resume_text}
@@ -75,7 +51,7 @@ Job:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "Return only valid JSON."},
+                {"role": "system", "content": "Return only JSON"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
@@ -85,8 +61,7 @@ Job:
         text = response.choices[0].message.content
 
         try:
-            parsed = json.loads(text)
-            return parsed
+            return json.loads(text)
         except:
             return {"error": "Invalid JSON", "raw": text}
 

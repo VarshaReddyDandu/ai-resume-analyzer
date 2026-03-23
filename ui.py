@@ -1,11 +1,12 @@
 import streamlit as st
 import requests
 
-API_URL = "http://127.0.0.1:8000/analyze"
+# 🔥 USE YOUR LIVE BACKEND
+API_URL = "https://ai-resume-analyzer-verm.onrender.com/analyze"
 
-st.set_page_config(page_title="Resume Intelligence System", layout="centered")
+st.set_page_config(page_title="AI Resume Analyzer", layout="centered")
 
-st.title("AI Resume Analyzer")
+st.markdown("# 🚀 AI Resume Analyzer")
 
 resume = st.file_uploader("Upload Resume (PDF)", type=["pdf"])
 job_desc = st.text_area("Paste Job Description")
@@ -25,41 +26,29 @@ if st.button("Analyze"):
 
                 if "error" in data:
                     st.error(data["error"])
-                    if "raw" in data:
-                        st.code(data["raw"])
                 else:
                     score = data.get("score", 0)
 
-                    # 🔥 SCORE DISPLAY
-                    st.subheader("Match Score")
+                    st.subheader("📊 Match Score")
                     st.progress(score / 100)
+                    st.write(f"{score}%")
 
-                    if score >= 80:
-                        st.success(f"{score}% - Strong Match")
-                    elif score >= 50:
-                        st.warning(f"{score}% - Moderate Match")
-                    else:
-                        st.error(f"{score}% - Weak Match")
-
-                    # 🔥 MISSING SKILLS
-                    st.subheader("Missing Skills")
+                    st.subheader("⚠️ Missing Skills")
                     for skill in data.get("missing_skills", []):
-                        st.markdown(f"🔻 {skill}")
+                        st.markdown(f"- {skill}")
 
-                    # 🔥 BULLETS
-                    st.subheader("Improved Resume Bullets")
+                    st.subheader("✨ Improved Bullets")
                     bullets = data.get("bullets", [])
-
-                    for bullet in bullets:
-                        st.markdown(f"✅ {bullet}")
+                    for b in bullets:
+                        st.markdown(f"✅ {b}")
 
                     st.download_button(
-                        label="Download Bullets",
-                        data="\n".join(bullets),
-                        file_name="resume_bullets.txt"
+                        "Download Bullets",
+                        "\n".join(bullets),
+                        file_name="resume.txt"
                     )
 
             except Exception as e:
-                st.error(f"Connection failed: {str(e)}")
+                st.error(f"Error: {e}")
     else:
-        st.warning("Upload resume and paste job description")
+        st.warning("Upload resume + paste job description")
