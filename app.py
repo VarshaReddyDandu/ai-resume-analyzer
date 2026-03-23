@@ -6,11 +6,13 @@ import PyPDF2
 
 app = FastAPI()
 
+# ✅ Groq client
 client = OpenAI(
     api_key=os.getenv("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1"
 )
 
+# 🔥 Extract text
 def extract_text_from_pdf(file):
     try:
         pdf = PyPDF2.PdfReader(file.file)
@@ -26,44 +28,58 @@ def root():
     return {"message": "API running"}
 
 @app.post("/analyze")
-async def analyze(resume: UploadFile = File(...), job_description: str = Form(...)):
+async def analyze(
+    resume: UploadFile = File(...),
+    job_description: str = Form(...)
+):
     try:
         resume_text = extract_text_from_pdf(resume)
-        job_description = job_description[:1000]
+        jd = job_description.lower()
+        res = resume_text.lower()
 
+        # 🔥 Skill-based scoring (REAL LOGIC)
+        skills = ["python", "aws", "sql", "machine learning", "pandas"]
+
+        match_count = sum(1 for s in skills if s in res and s in jd)
+        score = int((match_count / len(skills)) * 100)
+        score = max(score, 60)  # avoid unrealistic low score
+
+        # 🔥 Missing skills
+        missing_skills = [s for s in skills if s in jd and s not in res]
+
+        # 🔥 AI bullet improvement
         prompt = f"""
-You are a senior resume expert.
+Rewrite resume bullets with STRONG IMPACT.
 
-Return STRICT JSON:
-{{
- "score": number,
- "missing_skills": [],
- "bullets": []
-}}
+Rules:
+- Add numbers (%, scale, impact)
+- Max 20 words each
+- Use strong action verbs
+- No generic wording
 
 Resume:
 {resume_text}
-
-Job:
-{job_description}
 """
 
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "Return only JSON"},
+                {"role": "system", "content": "Return only bullet points"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
-            max_tokens=150
+            max_tokens=120
         )
 
-        text = response.choices[0].message.content
+        bullets_text = response.choices[0].message.content
 
-        try:
-            return json.loads(text)
-        except:
-            return {"error": "Invalid JSON", "raw": text}
+        bullets = [b.strip("-• ") for b in bullets_text.split("\n") if b.strip()]
+
+        return {
+            "score": score,
+            "missing_skills": missing_skills,
+            "bullets": bullets[:5]
+        }
 
     except Exception as e:
         return {"error": str(e)}
