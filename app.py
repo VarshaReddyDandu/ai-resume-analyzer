@@ -1,18 +1,16 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from openai import OpenAI
 import os
-import json
 import PyPDF2
 
 app = FastAPI()
 
-# ✅ Groq client
 client = OpenAI(
     api_key=os.getenv("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1"
 )
 
-# 🔥 Extract text
+# 🔥 Extract text from PDF
 def extract_text_from_pdf(file):
     try:
         pdf = PyPDF2.PdfReader(file.file)
@@ -34,28 +32,41 @@ async def analyze(
 ):
     try:
         resume_text = extract_text_from_pdf(resume)
-        jd = job_description.lower()
         res = resume_text.lower()
+        jd = job_description.lower()
 
-        # 🔥 Skill-based scoring (REAL LOGIC)
-        skills = ["python", "aws", "sql", "machine learning", "pandas"]
+        # 🔥 Smart skill pool
+        common_skills = [
+            "python", "sql", "aws", "machine learning", "pandas",
+            "docker", "kubernetes", "spark", "kafka",
+            "real-time", "data pipelines", "deep learning"
+        ]
 
-        match_count = sum(1 for s in skills if s in res and s in jd)
-        score = int((match_count / len(skills)) * 100)
-        score = max(score, 60)  # avoid unrealistic low score
+        # 🔥 Extract JD skills dynamically
+        jd_skills = [s for s in common_skills if s in jd]
 
         # 🔥 Missing skills
-        missing_skills = [s for s in skills if s in jd and s not in res]
+        missing_skills = [s for s in jd_skills if s not in res]
+
+        # 🔥 Score
+        match_count = sum(1 for s in jd_skills if s in res)
+
+        if jd_skills:
+            score = int((match_count / len(jd_skills)) * 100)
+        else:
+            score = 70
+
+        score = max(score, 40)
 
         # 🔥 AI bullet improvement
         prompt = f"""
-Rewrite resume bullets with STRONG IMPACT.
+Rewrite resume bullets with strong impact.
 
 Rules:
-- Add numbers (%, scale, impact)
-- Max 20 words each
-- Use strong action verbs
-- No generic wording
+- Add numbers (% or scale)
+- Max 20 words
+- Use strong verbs (Built, Improved, Reduced)
+- No generic text
 
 Resume:
 {resume_text}
@@ -64,7 +75,7 @@ Resume:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "Return only bullet points"},
+                {"role": "system", "content": "Return bullet points only"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
@@ -72,11 +83,10 @@ Resume:
         )
 
         bullets_text = response.choices[0].message.content
-
         bullets = [b.strip("-• ") for b in bullets_text.split("\n") if b.strip()]
 
         return {
-            "score": score,
+            "sc9ore": score,
             "missing_skills": missing_skills,
             "bullets": bullets[:5]
         }
