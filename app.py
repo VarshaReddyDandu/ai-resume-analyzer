@@ -1,30 +1,3 @@
-from fastapi import FastAPI, UploadFile, File, Form
-from openai import OpenAI
-import os
-import PyPDF2
-
-app = FastAPI()
-
-client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1"
-)
-
-# 🔥 Extract text from PDF
-def extract_text_from_pdf(file):
-    try:
-        pdf = PyPDF2.PdfReader(file.file)
-        text = ""
-        for page in pdf.pages[:3]:
-            text += page.extract_text() or ""
-        return text[:1000]
-    except:
-        return ""
-
-@app.get("/")
-def root():
-    return {"message": "API running"}
-
 @app.post("/analyze")
 async def analyze(
     resume: UploadFile = File(...),
@@ -32,30 +5,31 @@ async def analyze(
 ):
     try:
         resume_text = extract_text_from_pdf(resume)
+        
+        if not resume_text:
+            return {"error": "Could not extract text from resume"}
+
         res = resume_text.lower()
         jd = job_description.lower()
 
-        # 🔥 Smart skill pool
+        # 🔥 Better skill pool (expanded)
         common_skills = [
-            "python", "sql", "aws", "machine learning", "pandas",
-            "docker", "kubernetes", "spark", "kafka",
-            "real-time", "data pipelines", "deep learning"
+            "python", "sql", "aws", "machine learning", "ml",
+            "pandas", "docker", "kubernetes", "spark", "kafka",
+            "data pipelines", "deep learning", "nlp", "api",
+            "fastapi", "flask", "tensorflow", "pytorch"
         ]
 
-        # 🔥 Extract JD skills dynamically
-        jd_skills = [s for s in common_skills if s in jd]
+        # 🔥 Smarter matching (partial match support)
+        jd_skills = [s for s in common_skills if any(word in jd for word in s.split())]
 
         # 🔥 Missing skills
         missing_skills = [s for s in jd_skills if s not in res]
 
-        # 🔥 Score
+        # 🔥 Score calculation
         match_count = sum(1 for s in jd_skills if s in res)
 
-        if jd_skills:
-            score = int((match_count / len(jd_skills)) * 100)
-        else:
-            score = 70
-
+        score = int((match_count / len(jd_skills)) * 100) if jd_skills else 70
         score = max(score, 40)
 
         # 🔥 AI bullet improvement
@@ -75,18 +49,27 @@ Resume:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": "Return bullet points only"},
+                {"role": "system", "content": "Return ONLY 5 bullet points"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
-            max_tokens=120
+            max_tokens=150
         )
 
-        bullets_text = response.choices[0].message.content
-        bullets = [b.strip("-• ") for b in bullets_text.split("\n") if b.strip()]
+        # 🔥 Safe extraction
+        bullets_text = ""
+        if response and response.choices:
+            bullets_text = response.choices[0].message.content or ""
+
+        # 🔥 Strong parsing
+        bullets = [
+            b.strip("-•1234567890. ").strip()
+            for b in bullets_text.split("\n")
+            if len(b.strip()) > 5
+        ]
 
         return {
-            "sc9ore": score,
+            "score": score,
             "missing_skills": missing_skills,
             "bullets": bullets[:5]
         }
